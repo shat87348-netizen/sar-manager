@@ -35,8 +35,26 @@ class ParserTests(unittest.TestCase):
     def test_registered_source_codes(self) -> None:
         self.assertEqual(
             AdapterRegistry().source_codes,
-            ("CAPELLA", "GF3", "ICEYE", "STRIX", "UMBRA"),
+            ("CAPELLA", "GF3", "ICEYE", "LANHE", "STRIX", "UMBRA"),
         )
+
+    def test_lanhe_rss1b_product_meta(self) -> None:
+        candidate = candidate_named(
+            "RSS1B_SAR_SP1_01-01_E35.0_N31.1_20260111_L2_202608200202000001.XML"
+        )
+        parsed = AdapterRegistry().parse(candidate)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed.source, "LANHE")
+        self.assertEqual(parsed.external_id, "LANHE:202608200203000001")
+        self.assertEqual(parsed.name, "testSar")
+        self.assertEqual(
+            parsed.acquisition_time.isoformat(), "2026-08-20T05:04:52.923148"
+        )
+        self.assertEqual(len(parsed.coordinates), 4)
+        self.assertAlmostEqual(parsed.coordinates[0][0], 34.937219550422434)
+        self.assertAlmostEqual(parsed.coordinates[0][1], 31.126452487335321)
+        self.assertEqual(parsed.metadata["polarization"], "HH")
+        self.assertEqual(parsed.metadata["product_level"], "LEVEL2")
 
     def test_gf3_sample(self) -> None:
         candidate = candidate_named(

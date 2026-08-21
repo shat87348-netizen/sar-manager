@@ -1,6 +1,6 @@
 # SAR Manager
 
-面向本地 Linux 环境的 SAR 元数据归纳、PostGIS 入库和 Cesium 查询接口。当前支持 GF3、StriX、Umbra、Capella、ICEYE，以及普通目录、ZIP、TAR、TAR.GZ、TGZ 数据容器。
+面向本地 Linux 环境的 SAR 元数据归纳、PostGIS 入库和 Cesium 查询接口。当前支持 GF3、StriX、Umbra、Capella、ICEYE、LANHE，以及普通目录、ZIP、TAR、TAR.GZ、TGZ 数据容器。
 
 ## 已实现范围
 
@@ -138,7 +138,7 @@ docker compose run --rm --entrypoint nice scanner -n 15 python -m app.cli scan /
 设置 `PUBLIC_BASE_URL=http://服务器地址:端口`。
 
 当前 `tiff` 样例扫描报告应为：发现 3 个 XML、7 个 JSON；导入 6 个主产品；
-忽略 4 个 ICEYE 辅助 JSON。GF3 样例缺少部分影像资产，因此是 `PARTIAL`，
+忽略 4 个 ICEYE 辅助 JSON。GF3 和 LANHE 样例缺少部分影像资产，因此是 `PARTIAL`，
 其余主产品是 `READY`。
 
 ## 完全离线部署
