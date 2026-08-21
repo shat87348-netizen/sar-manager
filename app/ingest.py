@@ -80,9 +80,9 @@ def _validate_source(target: Path, expected_source: str, registry: AdapterRegist
             discovery_errors.append(f"{result.metadata_file.name}: {exc}")
             continue
         if parsed is None:
-            # Product folders can include auxiliary XML/JSON (for example a
-            # WANG *_QUALITY.XML).  They are not primary SAR metadata and must
-            # not reject a folder which also contains a recognized product.
+            discovery_errors.append(
+                f"{result.metadata_file.name}: no adapter recognized this metadata"
+            )
             continue
         if parsed.source != expected_source:
             raise IngestError(

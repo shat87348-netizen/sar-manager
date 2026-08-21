@@ -43,7 +43,7 @@ GET /api/v1/sar
 | `startTime` | 否 | `2022-01-01T00:00:00` | 获取时间大于或等于该时间的数据 |
 | `endTime` | 否 | `2026-12-31T23:59:59` | 获取时间小于或等于该时间的数据 |
 | `bbox` | 否 | `73,18,135,54` | 地图范围，顺序为最小经度、最小纬度、最大经度、最大纬度 |
-| `source` | 否 | `GF3`、`STRIX`、`UMBRA`、`CAPELLA`、`ICEYE`、`WANG` | 限制数据来源；不传表示全部来源 |
+| `source` | 否 | `GF3`、`STRIX`、`UMBRA`、`CAPELLA`、`ICEYE` | 限制数据来源；不传表示全部来源 |
 | `name` | 否 | `GF3_KRN` | 按影像名称或外部产品编号模糊查询，不区分大小写 |
 | `includeNonReady` | 否 | `true` | 是否同时返回非 READY 数据，默认值为 `false` |
 | `limit` | 否 | `20` | 每页最多返回多少条，默认 `100`，最大 `1000` |
@@ -320,14 +320,14 @@ TIFF、PNG、JPEG 和 WEBP；同一类型可以返回多条。每个文件都有
 ```json
 {
   "dataset_id": "数据 UUID",
-  "external_id": "WANG:RSS1B_...",
-  "name": "testSar",
+  "external_id": "GF3:示例产品编号",
+  "name": "示例产品",
   "files": [
     {
       "id": "文件 UUID",
       "kind": "KML",
       "file_name": "footprint.kml",
-      "path": "wang/testSar/footprint.kml",
+      "path": "gf3/example/footprint.kml",
       "container_type": "FILE",
       "mime_type": "application/vnd.google-earth.kml+xml",
       "size_bytes": 1234,

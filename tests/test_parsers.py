@@ -35,68 +35,8 @@ class ParserTests(unittest.TestCase):
     def test_registered_source_codes(self) -> None:
         self.assertEqual(
             AdapterRegistry().source_codes,
-            ("CAPELLA", "GF3", "ICEYE", "STRIX", "UMBRA", "WANG"),
+            ("CAPELLA", "GF3", "ICEYE", "STRIX", "UMBRA"),
         )
-
-    def test_wang_sample_without_classified_assets(self) -> None:
-        candidate = candidate_named(
-            "RSS1B_SAR_SP2_01-01_E35.0_N32.9_20260728_L2_2026072823352003.xml"
-        )
-        parsed = AdapterRegistry().parse(candidate)
-        self.assertIsNotNone(parsed)
-        self.assertEqual(parsed.source, "WANG")
-        self.assertEqual(parsed.name, "testSar")
-        self.assertEqual(
-            parsed.external_id,
-            "WANG:RSS1B_SAR_SP2_01-01_E35.0_N32.9_20260728_L2_2026072823352003",
-        )
-        self.assertEqual(parsed.acquisition_time.isoformat(), "2026-07-28T23:35:20")
-        self.assertEqual(len(parsed.coordinates), 4)
-        self.assertAlmostEqual(parsed.coordinates[0][0], 34.910188815151528)
-        self.assertAlmostEqual(parsed.coordinates[0][1], 32.982593418104322)
-
-        assets = {asset.kind: asset for asset in select_assets(candidate)}
-        self.assertIn(AssetKind.XML, assets)
-        self.assertNotIn(AssetKind.TIFF, assets)
-        self.assertNotIn(AssetKind.THUMBNAIL, assets)
-        self.assertEqual(
-            [item.name for item in select_files(candidate)],
-            [candidate.metadata_file.name],
-        )
-
-    def test_wang_discovers_same_directory_tiff_and_thumbnail(self) -> None:
-        source_xml = SAMPLE_ROOT.joinpath(
-            "wang",
-            "testSar",
-            "RSS1B_SAR_SP2_01-01_E35.0_N32.9_20260728_L2_2026072823352003.xml",
-        )
-        stem = source_xml.stem
-        with tempfile.TemporaryDirectory() as directory:
-            product = Path(directory) / "testSar"
-            product.mkdir()
-            shutil.copy2(source_xml, product / source_xml.name)
-            (product / f"{stem}.tiff").write_bytes(b"test tiff")
-            (product / f"{stem}.png").write_bytes(b"test thumbnail")
-
-            candidate = next(
-                item
-                for item in iter_candidates(product)
-                if not isinstance(item, DiscoveryError)
-            )
-            parsed = AdapterRegistry().parse(candidate)
-            self.assertIsNotNone(parsed)
-            assets = {asset.kind: asset for asset in select_assets(candidate)}
-            self.assertEqual(assets[AssetKind.TIFF].location.name, f"{stem}.tiff")
-            self.assertEqual(assets[AssetKind.THUMBNAIL].location.name, f"{stem}.png")
-            listed_files = {item.name: item.file_kind for item in select_files(candidate)}
-            self.assertEqual(
-                listed_files,
-                {
-                    source_xml.name: "XML",
-                    f"{stem}.tiff": "TIFF",
-                    f"{stem}.png": "PNG",
-                },
-            )
 
     def test_gf3_sample(self) -> None:
         candidate = candidate_named(

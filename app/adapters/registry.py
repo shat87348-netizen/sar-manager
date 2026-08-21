@@ -9,7 +9,6 @@ from app.adapters.gf3 import Gf3Adapter
 from app.adapters.iceye import IceyeAdapter
 from app.adapters.strix import StrixAdapter
 from app.adapters.umbra import UmbraAdapter
-from app.adapters.wang import WangAdapter
 from app.domain import MetadataCandidate, ParsedMetadata
 
 
@@ -22,7 +21,6 @@ class AdapterRegistry:
         self.xml_adapters = xml_adapters or (
             Gf3Adapter(),
             StrixAdapter(),
-            WangAdapter(),
         )
         self.json_adapters = json_adapters or (
             UmbraAdapter(),
