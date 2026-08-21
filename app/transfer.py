@@ -9,6 +9,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from app.adapters import AdapterRegistry
 from app.config import get_settings
 from app.repository import (
     cancel_transfer_file,
@@ -41,6 +42,11 @@ class TransferJobRequest(BaseModel):
         if len(set(value)) != len(value):
             raise ValueError("files must not contain duplicates")
         return value
+
+    @field_validator("source")
+    @classmethod
+    def normalize_source(cls, value: str) -> str:
+        return value.strip().upper()
 
 
 def _relative_path(value: str, field: str) -> Path:
@@ -80,6 +86,15 @@ def _path_size(path: Path) -> int:
 
 def prepare_transfer_files(request: TransferJobRequest) -> list[dict[str, object]]:
     settings = get_settings()
+    supported_sources = AdapterRegistry().source_codes
+    if request.source not in supported_sources:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"unsupported SAR source: {request.source} "
+                f"(supported: {', '.join(supported_sources)})"
+            ),
+        )
     source_root = settings.transfer_sources.get(request.server)
     if source_root is None:
         raise HTTPException(
@@ -90,7 +105,8 @@ def prepare_transfer_files(request: TransferJobRequest) -> list[dict[str, object
             status_code=503, detail=f"transfer server is not mounted: {request.server}"
         )
     destination_subdirectory = _relative_path(
-        request.destination_subdirectory or ".", "destination_subdirectory"
+        request.destination_subdirectory.strip() or request.source.lower(),
+        "destination_subdirectory",
     )
     destination_names: set[str] = set()
     prepared: list[dict[str, object]] = []

@@ -424,10 +424,12 @@ POST /api/v1/transfer-jobs
   "source": "GF3",
   "server": "sar-storage-01",
   "files": ["gf3/2026/GF3_001.zip", "gf3/2026/GF3_002.zip"],
-  "destination_subdirectory": "gf3/2026-08-21",
   "mode": "COPY"
 }
 ```
+
+`source` 必须是系统已注册的数据源。未传 `destination_subdirectory` 时默认搬到
+`/upload/{source小写}`；例如 `source=LANHE` 会搬到 `/upload/lanhe`。
 
 成功时返回 HTTP `202` 与任务编号。使用以下接口查询 Web 所需的进度：
 

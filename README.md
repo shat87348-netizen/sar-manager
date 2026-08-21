@@ -112,10 +112,13 @@ Content-Type: application/json
   "source": "GF3",
   "server": "sar-storage-01",
   "files": ["gf3/2026/product-001.zip", "gf3/2026/product-002.zip"],
-  "destination_subdirectory": "gf3/2026-08-21",
   "mode": "COPY"
 }
 ```
+
+未传 `destination_subdirectory` 时，系统根据 `source` 自动搬到 `/upload/{source}`；
+例如 `source=LANHE` 默认进入 `/upload/lanhe`。如需按批次分目录，可以显式传入
+`destination_subdirectory`，例如 `lanhe/2026-08-21`。
 
 返回 `202 Accepted` 和 `job_id`。调用方通过 `GET /api/v1/transfer-jobs/{job_id}` 每 1–2 秒查询总进度和逐文件进度，
 也可使用 `GET /api/v1/transfer-jobs?status=RUNNING` 查看运行中的任务；
