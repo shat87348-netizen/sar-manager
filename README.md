@@ -86,6 +86,43 @@ GET /api/v1/sar?startTime=2022-01-01%2000:00:00&endTime=2025-12-31%2023:59:59&bb
 
 默认只返回 `READY`。调试异常记录时增加 `includeNonReady=true`。
 
+## 局域网文件搬运
+
+SAR Manager 可以将一个或多个已挂载的局域网文件复制（或在确认成功后移动）到临时入库区，
+但**不会**解析元数据、生成缩略图或执行扫描。下游处理系统负责后续处理。
+
+先将允许访问的局域网共享目录挂载到宿主机，并配置为 API 容器的只读目录。例如：
+
+```dotenv
+SAR_TRANSFER_SOURCE_DIR=/mnt/sar-shares
+TRANSFER_SOURCE_ROOTS={"sar-storage-01":"/transfer-sources/sar-storage-01"}
+TRANSFER_DESTINATION_ROOT=/upload
+```
+
+`server` 只能使用 `TRANSFER_SOURCE_ROOTS` 中预配置的名称，传入的 `files` 必须是其目录下的相对路径，
+因此接口不会接受任意 IP、网络凭据或可越界的绝对路径。
+
+创建异步搬运任务：
+
+```http
+POST /api/v1/transfer-jobs
+Content-Type: application/json
+
+{
+  "source": "GF3",
+  "server": "sar-storage-01",
+  "files": ["gf3/2026/product-001.zip", "gf3/2026/product-002.zip"],
+  "destination_subdirectory": "gf3/2026-08-21",
+  "mode": "COPY"
+}
+```
+
+返回 `202 Accepted` 和 `job_id`。调用方通过 `GET /api/v1/transfer-jobs/{job_id}` 每 1–2 秒查询总进度和逐文件进度，
+也可使用 `GET /api/v1/transfer-jobs?status=RUNNING` 查看运行中的任务；
+`POST /api/v1/transfer-jobs/{job_id}/cancel` 取消尚未完成的任务。
+
+状态为 `QUEUED`、`RUNNING`、`COMPLETED`、`PARTIAL_FAILED`、`FAILED` 或 `CANCELLED`。`MOVE` 模式仅在单个文件完整复制到目标目录后才删除源文件，推荐默认使用 `COPY`。
+
 ## 扫描与接口性能
 
 请使用 `docker compose run --rm scanner`（离线包中为 `./manage.sh scan`）执行大批量扫描，不要将 `POST /api/v1/admin/scan` 用于 15000 份数据这类长任务。扫描器是独立的一次性容器，默认最多使用 1 个 CPU，并以较低调度优先级运行；每次写库后默认等待 20ms，让数据库优先处理查询；API 可以继续提供查询服务。

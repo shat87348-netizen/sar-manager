@@ -409,3 +409,35 @@ CORS_ORIGINS=http://192.168.5.100:8080
 | `/api/v1/sar/{dataset_id}` | GET | 获取单条 SAR 详情 |
 | `/api/v1/sar/{dataset_id}/files` | GET | 获取产品目录内全部允许文件及完整 URL |
 | `/api/v1/assets/{asset_id}` | GET | 访问 XML、JSON、KML、TIFF、PNG 等文件 |
+
+## 11. 局域网文件搬运
+
+SAR Manager 的搬运接口只复制或移动文件；不执行 SAR 解析、扫描、缩略图生成或数据库入库。
+局域网共享必须先由部署人员挂载并配置为受控的 `server` 标识，调用者不能提交任意服务器地址、账号或绝对路径。
+
+```http
+POST /api/v1/transfer-jobs
+```
+
+```json
+{
+  "source": "GF3",
+  "server": "sar-storage-01",
+  "files": ["gf3/2026/GF3_001.zip", "gf3/2026/GF3_002.zip"],
+  "destination_subdirectory": "gf3/2026-08-21",
+  "mode": "COPY"
+}
+```
+
+成功时返回 HTTP `202` 与任务编号。使用以下接口查询 Web 所需的进度：
+
+```http
+GET /api/v1/transfer-jobs/{job_id}
+```
+
+响应中的 `progress.transferred_bytes`、`progress.total_bytes` 与 `progress.percent` 表示总体进度，`files` 数组包含每个文件的状态和已传输字节数。建议 Web 每 1–2 秒轮询一次。任务列表和取消接口分别为：
+
+```http
+GET  /api/v1/transfer-jobs?status=RUNNING
+POST /api/v1/transfer-jobs/{job_id}/cancel
+```

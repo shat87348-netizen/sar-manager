@@ -382,3 +382,206 @@ def get_existing_metadata_hashes() -> dict[str, str]:
             "SELECT external_id, xml_sha256 FROM sar_dataset"
         ).fetchall()
     return {row["external_id"]: row["xml_sha256"] for row in rows}
+
+
+def create_transfer_job(
+    source: str,
+    server: str,
+    destination_subdirectory: str,
+    mode: str,
+    files: list[dict[str, Any]],
+) -> dict[str, Any]:
+    job_id = uuid4()
+    total_bytes = sum(item["size_bytes"] for item in files)
+    with get_pool().connection() as connection, connection.transaction():
+        connection.execute(
+            """
+            INSERT INTO transfer_job (
+                id, source, server, destination_subdirectory, mode, status,
+                total_files, total_bytes
+            ) VALUES (%s, %s, %s, %s, %s, 'QUEUED', %s, %s)
+            """,
+            (job_id, source, server, destination_subdirectory, mode, len(files), total_bytes),
+        )
+        for item in files:
+            connection.execute(
+                """
+                INSERT INTO transfer_file (
+                    id, job_id, source_path, destination_path, status, size_bytes
+                ) VALUES (%s, %s, %s, %s, 'QUEUED', %s)
+                """,
+                (uuid4(), job_id, item["source_path"], item["destination_path"], item["size_bytes"]),
+            )
+    return get_transfer_job(job_id)  # type: ignore[return-value]
+
+
+def get_transfer_job(job_id: UUID) -> dict[str, Any] | None:
+    with get_pool().connection() as connection:
+        job = connection.execute("SELECT * FROM transfer_job WHERE id = %s", (job_id,)).fetchone()
+        if job is None:
+            return None
+        files = connection.execute(
+            "SELECT * FROM transfer_file WHERE job_id = %s ORDER BY created_at, id", (job_id,)
+        ).fetchall()
+    job["files"] = list(files)
+    return job
+
+
+def list_transfer_jobs(status: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+    params: list[Any] = []
+    where = ""
+    if status:
+        where = "WHERE status = %s"
+        params.append(status)
+    params.append(limit)
+    with get_pool().connection() as connection:
+        return list(
+            connection.execute(
+                f"SELECT * FROM transfer_job {where} ORDER BY created_at DESC LIMIT %s", params
+            ).fetchall()
+        )
+
+
+def start_transfer_job(job_id: UUID) -> bool:
+    with get_pool().connection() as connection, connection.transaction():
+        row = connection.execute(
+            "SELECT status FROM transfer_job WHERE id = %s FOR UPDATE", (job_id,)
+        ).fetchone()
+        if row is None or row["status"] != "QUEUED":
+            return False
+        connection.execute(
+            "UPDATE transfer_job SET status = 'RUNNING', started_at = NOW() WHERE id = %s", (job_id,)
+        )
+    return True
+
+
+def update_transfer_file_progress(file_id: UUID, transferred_bytes: int, status: str | None = None) -> None:
+    assignments = ["transferred_bytes = %s", "updated_at = NOW()"]
+    params: list[Any] = [transferred_bytes]
+    if status:
+        assignments.append("status = %s")
+        params.append(status)
+    params.append(file_id)
+    with get_pool().connection() as connection:
+        connection.execute(
+            f"UPDATE transfer_file SET {', '.join(assignments)} WHERE id = %s", params
+        )
+
+
+def finish_transfer_file(file_id: UUID, success: bool, error_message: str | None = None) -> None:
+    with get_pool().connection() as connection, connection.transaction():
+        row = connection.execute(
+            "SELECT job_id, size_bytes FROM transfer_file WHERE id = %s FOR UPDATE", (file_id,)
+        ).fetchone()
+        if row is None:
+            return
+        if success:
+            connection.execute(
+                """
+                UPDATE transfer_file
+                SET status = 'COMPLETED', transferred_bytes = size_bytes, error_message = NULL,
+                    updated_at = NOW()
+                WHERE id = %s
+                """,
+                (file_id,),
+            )
+            connection.execute(
+                """
+                UPDATE transfer_job
+                SET completed_files = completed_files + 1,
+                    transferred_bytes = transferred_bytes + %s
+                WHERE id = %s
+                """,
+                (row["size_bytes"], row["job_id"]),
+            )
+        else:
+            connection.execute(
+                """
+                UPDATE transfer_file
+                SET status = 'FAILED', error_message = %s, updated_at = NOW()
+                WHERE id = %s
+                """,
+                (error_message, file_id),
+            )
+            connection.execute(
+                "UPDATE transfer_job SET failed_files = failed_files + 1 WHERE id = %s",
+                (row["job_id"],),
+            )
+
+
+def finalize_transfer_job(job_id: UUID, error_message: str | None = None) -> None:
+    with get_pool().connection() as connection, connection.transaction():
+        job = connection.execute(
+            "SELECT total_files, completed_files, failed_files, status FROM transfer_job WHERE id = %s FOR UPDATE",
+            (job_id,),
+        ).fetchone()
+        if job is None or job["status"] == "CANCELLED":
+            return
+        if job["failed_files"] == 0:
+            status = "COMPLETED"
+        elif job["completed_files"] == 0:
+            status = "FAILED"
+        else:
+            status = "PARTIAL_FAILED"
+        connection.execute(
+            "UPDATE transfer_job SET status = %s, error_message = %s, completed_at = NOW() WHERE id = %s",
+            (status, error_message, job_id),
+        )
+
+
+def cancel_transfer_job(job_id: UUID) -> bool:
+    with get_pool().connection() as connection, connection.transaction():
+        row = connection.execute(
+            "SELECT status FROM transfer_job WHERE id = %s FOR UPDATE", (job_id,)
+        ).fetchone()
+        if row is None or row["status"] not in ("QUEUED", "RUNNING"):
+            return False
+        connection.execute(
+            "UPDATE transfer_job SET status = 'CANCELLED', completed_at = NOW() WHERE id = %s", (job_id,)
+        )
+        connection.execute(
+            "UPDATE transfer_file SET status = 'CANCELLED', updated_at = NOW() WHERE job_id = %s AND status = 'QUEUED'",
+            (job_id,),
+        )
+    return True
+
+
+def transfer_job_is_cancelled(job_id: UUID) -> bool:
+    with get_pool().connection() as connection:
+        row = connection.execute("SELECT status FROM transfer_job WHERE id = %s", (job_id,)).fetchone()
+    return row is None or row["status"] == "CANCELLED"
+
+
+def cancel_transfer_file(file_id: UUID) -> None:
+    with get_pool().connection() as connection:
+        connection.execute(
+            """
+            UPDATE transfer_file
+            SET status = 'CANCELLED', updated_at = NOW()
+            WHERE id = %s AND status IN ('QUEUED', 'TRANSFERRING')
+            """,
+            (file_id,),
+        )
+
+
+def fail_transfer_job(job_id: UUID, error_message: str) -> None:
+    with get_pool().connection() as connection:
+        connection.execute(
+            """
+            UPDATE transfer_job
+            SET status = 'FAILED', error_message = %s, completed_at = NOW()
+            WHERE id = %s AND status = 'RUNNING'
+            """,
+            (error_message, job_id),
+        )
+
+
+def fail_interrupted_transfer_jobs() -> None:
+    with get_pool().connection() as connection:
+        connection.execute(
+            """
+            UPDATE transfer_job
+            SET status = 'FAILED', error_message = 'Transfer interrupted by service restart', completed_at = NOW()
+            WHERE status = 'RUNNING'
+            """
+        )

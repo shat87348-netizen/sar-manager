@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -16,19 +16,28 @@ from app.adapters.registry import AdapterRegistry
 from app.config import get_settings
 from app.db import close_pool, open_pool
 from app.repository import (
+    cancel_transfer_job,
+    create_transfer_job,
+    fail_interrupted_transfer_jobs,
     get_asset,
     get_dataset,
     get_dataset_files,
+    get_transfer_job,
     get_source_counts,
     get_stats,
+    list_transfer_jobs,
     query_datasets,
 )
 from app.scanner import scan_storage
+from app.transfer import TransferJobRequest, prepare_transfer_files, run_transfer_job
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     open_pool()
+    # A process restart cannot safely resume a partial filesystem copy. Surface
+    # the interrupted job to callers instead of reporting stale RUNNING state.
+    fail_interrupted_transfer_jobs()
     yield
     close_pool()
 
@@ -220,6 +229,95 @@ def list_sources() -> dict:
             {"code": source_code, "count": counts.get(source_code, 0)}
             for source_code in AdapterRegistry().source_codes
         ]
+    }
+
+
+@app.post("/api/v1/transfer-jobs", status_code=status.HTTP_202_ACCEPTED)
+def create_transfer(
+    payload: TransferJobRequest, background_tasks: BackgroundTasks
+) -> dict:
+    """Copy or move files from an approved LAN mount into the staging directory."""
+    files = prepare_transfer_files(payload)
+    job = create_transfer_job(
+        source=payload.source.upper(),
+        server=payload.server,
+        destination_subdirectory=payload.destination_subdirectory,
+        mode=payload.mode,
+        files=files,
+    )
+    background_tasks.add_task(run_transfer_job, job["id"])
+    return _transfer_job_response(job)
+
+
+@app.get("/api/v1/transfer-jobs")
+def transfer_jobs(
+    status_text: str | None = Query(None, alias="status"),
+    limit: int = Query(100, ge=1, le=500),
+) -> dict:
+    return {
+        "jobs": [
+            _transfer_job_response(job) for job in list_transfer_jobs(status_text, limit)
+        ]
+    }
+
+
+@app.get("/api/v1/transfer-jobs/{job_id}")
+def transfer_job_detail(job_id: UUID) -> dict:
+    job = get_transfer_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="transfer job not found")
+    return _transfer_job_response(job)
+
+
+@app.post("/api/v1/transfer-jobs/{job_id}/cancel")
+def cancel_transfer(job_id: UUID) -> dict:
+    if not cancel_transfer_job(job_id):
+        raise HTTPException(status_code=409, detail="transfer job cannot be cancelled")
+    job = get_transfer_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="transfer job not found")
+    return _transfer_job_response(job)
+
+
+def _transfer_job_response(job: dict) -> dict:
+    files = job.get("files", [])
+    transferred_bytes = (
+        sum(item["transferred_bytes"] for item in files)
+        if files
+        else job["transferred_bytes"]
+    )
+    total_bytes = job["total_bytes"]
+    percent = round((transferred_bytes / total_bytes) * 100, 2) if total_bytes else 100.0
+    return {
+        "job_id": job["id"],
+        "source": job["source"],
+        "server": job["server"],
+        "destination_subdirectory": job["destination_subdirectory"],
+        "mode": job["mode"],
+        "status": job["status"],
+        "progress": {
+            "total_files": job["total_files"],
+            "completed_files": job["completed_files"],
+            "failed_files": job["failed_files"],
+            "total_bytes": total_bytes,
+            "transferred_bytes": transferred_bytes,
+            "percent": percent,
+        },
+        "error_message": job["error_message"],
+        "created_at": job["created_at"],
+        "started_at": job["started_at"],
+        "completed_at": job["completed_at"],
+        "files": [
+            {
+                "source_path": item["source_path"],
+                "destination_path": item["destination_path"],
+                "status": item["status"],
+                "size_bytes": item["size_bytes"],
+                "transferred_bytes": item["transferred_bytes"],
+                "error_message": item["error_message"],
+            }
+            for item in files
+        ],
     }
 
 

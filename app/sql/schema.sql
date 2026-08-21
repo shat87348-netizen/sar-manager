@@ -73,6 +73,45 @@ CREATE TABLE IF NOT EXISTS sar_file (
 
 CREATE INDEX IF NOT EXISTS idx_sar_file_dataset ON sar_file (dataset_id);
 
+-- File transfer jobs are intentionally separate from SAR ingestion.  The
+-- manager only copies files from approved LAN mounts into a staging area; a
+-- downstream process is responsible for metadata parsing and ingestion.
+CREATE TABLE IF NOT EXISTS transfer_job (
+    id UUID PRIMARY KEY,
+    source TEXT NOT NULL,
+    server TEXT NOT NULL,
+    destination_subdirectory TEXT NOT NULL DEFAULT '',
+    mode TEXT NOT NULL CHECK (mode IN ('COPY', 'MOVE')),
+    status TEXT NOT NULL CHECK (
+        status IN ('QUEUED', 'RUNNING', 'COMPLETED', 'PARTIAL_FAILED', 'FAILED', 'CANCELLED')
+    ),
+    total_files INTEGER NOT NULL DEFAULT 0,
+    completed_files INTEGER NOT NULL DEFAULT 0,
+    failed_files INTEGER NOT NULL DEFAULT 0,
+    total_bytes BIGINT NOT NULL DEFAULT 0,
+    transferred_bytes BIGINT NOT NULL DEFAULT 0,
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE TABLE IF NOT EXISTS transfer_file (
+    id UUID PRIMARY KEY,
+    job_id UUID NOT NULL REFERENCES transfer_job(id) ON DELETE CASCADE,
+    source_path TEXT NOT NULL,
+    destination_path TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('QUEUED', 'TRANSFERRING', 'COMPLETED', 'FAILED', 'CANCELLED')),
+    size_bytes BIGINT NOT NULL DEFAULT 0,
+    transferred_bytes BIGINT NOT NULL DEFAULT 0,
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_transfer_job_status ON transfer_job (status, created_at);
+CREATE INDEX IF NOT EXISTS idx_transfer_file_job ON transfer_file (job_id);
+
 -- Version 0.2 adds JSON description files. Existing installations execute this
 -- schema on every API start, so update the original 0.1 constraint in place.
 DO $$
