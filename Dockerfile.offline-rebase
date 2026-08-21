@@ -1,0 +1,13 @@
+ARG BASE_IMAGE=sar-manager-api:0.1.0
+FROM ${BASE_IMAGE}
+
+USER root
+WORKDIR /app
+
+# The Python dependencies are unchanged in 0.2.4. Reusing a verified prior
+# linux/amd64 image lets an offline build replace only application sources.
+COPY pyproject.toml README.md ./
+COPY app ./app
+COPY web ./web
+
+USER sar

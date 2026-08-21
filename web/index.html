@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SAR 接口测试</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">SAR MANAGER</p>
+          <h1>接口测试</h1>
+          <p class="subtitle">验证数据状态、条件查询和文件访问。</p>
+        </div>
+        <div id="healthBadge" class="health-badge pending" aria-live="polite">
+          <span class="health-dot"></span>
+          <span>正在连接</span>
+        </div>
+      </header>
+
+      <section id="summaryGrid" class="summary-grid" aria-label="数据统计">
+        <article class="summary-card">
+          <span>数据总数</span>
+          <strong id="totalCount">—</strong>
+        </article>
+        <article class="summary-card">
+          <span>READY</span>
+          <strong id="readyCount">—</strong>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>条件查询</h2>
+            <p>调用 <code>GET /api/v1/sar</code></p>
+          </div>
+          <button id="resetButton" class="button secondary" type="button">重置</button>
+        </div>
+
+        <form id="queryForm" class="query-form">
+          <label>
+            <span>开始时间</span>
+            <input id="startTime" name="startTime" type="datetime-local" step="1" />
+          </label>
+          <label>
+            <span>结束时间</span>
+            <input id="endTime" name="endTime" type="datetime-local" step="1" />
+          </label>
+          <label>
+            <span>数据来源</span>
+            <select id="source" name="source">
+              <option value="">全部</option>
+            </select>
+          </label>
+          <label>
+            <span>影像名称</span>
+            <input id="name" name="name" type="search" placeholder="支持输入部分名称" />
+          </label>
+          <label class="bbox-field">
+            <span>地图范围 bbox</span>
+            <input id="bbox" name="bbox" type="text" placeholder="minLon,minLat,maxLon,maxLat" />
+          </label>
+          <label class="checkbox-field">
+            <input id="includeNonReady" name="includeNonReady" type="checkbox" />
+            <span>包含非 READY 数据</span>
+          </label>
+          <button id="queryButton" class="button primary" type="submit">查询</button>
+        </form>
+
+        <p id="requestUrl" class="request-url" aria-live="polite"></p>
+        <p id="errorMessage" class="error-message" role="alert" hidden></p>
+      </section>
+
+      <section class="panel results-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>查询结果</h2>
+            <p id="resultCount">每次最多预览 20 条</p>
+          </div>
+        </div>
+        <div id="results" class="results" aria-live="polite"></div>
+      </section>
+
+      <section class="panel json-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>接口响应</h2>
+            <p>查询或点击“详情”后在此显示 JSON。</p>
+          </div>
+          <button id="copyButton" class="button secondary" type="button">复制 JSON</button>
+        </div>
+        <pre id="jsonOutput">尚无数据</pre>
+      </section>
+    </main>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

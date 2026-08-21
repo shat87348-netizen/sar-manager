@@ -1,0 +1,62 @@
+version: "2.4"
+
+services:
+  db:
+    image: ${POSTGIS_IMAGE:-postgis/postgis:16-3.5}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sar}
+      POSTGRES_USER: ${POSTGRES_USER:-sar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-offline}
+    volumes:
+      - sar-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  api:
+    image: ${SAR_API_IMAGE:-sar-manager-api:0.2.4}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sar}:${POSTGRES_PASSWORD:-change-me-offline}@db:5432/${POSTGRES_DB:-sar}
+      SCAN_ROOT: /data
+      SCAN_WRITE_DELAY_MS: ${SCANNER_WRITE_DELAY_MS:-20}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+    volumes:
+      - ${SAR_DATA_DIR:-./tiff}:/data:ro,z
+    ports:
+      - ${SAR_API_PORT:-8000}:8000
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # 手工启动的一次性扫描容器。它不会随 install/start 自动运行。
+  scanner:
+    image: ${SAR_API_IMAGE:-sar-manager-api:0.2.4}
+    profiles: ["manual"]
+    user: "0:0"
+    command: ["nice", "-n", "${SCANNER_NICE:-15}", "python", "-m", "app.cli", "scan", "/data"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sar}:${POSTGRES_PASSWORD:-change-me-offline}@db:5432/${POSTGRES_DB:-sar}
+      SCAN_ROOT: /data
+      UPLOAD_ROOT: /upload
+      SCAN_WRITE_DELAY_MS: ${SCANNER_WRITE_DELAY_MS:-20}
+    volumes:
+      - ${SAR_DATA_DIR:-./tiff}:/data:rw,z
+      - ${SAR_UPLOAD_DIR:-/upload}:/upload:rw,z
+    depends_on:
+      db:
+        condition: service_healthy
+    cpus: "${SCANNER_CPUS:-1.0}"
+    restart: "no"
+
+volumes:
+  sar-db:

@@ -1,0 +1,10 @@
+.DS_Store
+.env
+.git
+.pytest_cache
+.ruff_cache
+__pycache__
+*.pyc
+offline-bundle
+tiff
+tests
