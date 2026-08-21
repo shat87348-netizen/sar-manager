@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS transfer_job (
     total_files INTEGER NOT NULL DEFAULT 0,
     completed_files INTEGER NOT NULL DEFAULT 0,
     failed_files INTEGER NOT NULL DEFAULT 0,
+    skipped_files INTEGER NOT NULL DEFAULT 0,
     total_bytes BIGINT NOT NULL DEFAULT 0,
     transferred_bytes BIGINT NOT NULL DEFAULT 0,
     error_message TEXT,
@@ -100,7 +101,7 @@ CREATE TABLE IF NOT EXISTS transfer_file (
     job_id UUID NOT NULL REFERENCES transfer_job(id) ON DELETE CASCADE,
     source_path TEXT NOT NULL,
     destination_path TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('QUEUED', 'TRANSFERRING', 'COMPLETED', 'FAILED', 'CANCELLED')),
+    status TEXT NOT NULL CHECK (status IN ('QUEUED', 'TRANSFERRING', 'COMPLETED', 'SKIPPED', 'FAILED', 'CANCELLED')),
     size_bytes BIGINT NOT NULL DEFAULT 0,
     transferred_bytes BIGINT NOT NULL DEFAULT 0,
     error_message TEXT,
@@ -110,6 +111,45 @@ CREATE TABLE IF NOT EXISTS transfer_file (
 
 CREATE INDEX IF NOT EXISTS idx_transfer_job_status ON transfer_job (status, created_at);
 CREATE INDEX IF NOT EXISTS idx_transfer_file_job ON transfer_file (job_id);
+
+ALTER TABLE transfer_job
+    ADD COLUMN IF NOT EXISTS skipped_files INTEGER NOT NULL DEFAULT 0;
+
+-- Existing installations have a generated status check which predates SKIPPED.
+DO $$
+DECLARE
+    old_status_constraint TEXT;
+BEGIN
+    SELECT conname INTO old_status_constraint
+    FROM pg_constraint
+    WHERE conrelid = 'transfer_file'::regclass
+      AND contype = 'c'
+      AND pg_get_constraintdef(oid) LIKE '%status%'
+      AND pg_get_constraintdef(oid) NOT LIKE '%SKIPPED%'
+    LIMIT 1;
+
+    IF old_status_constraint IS NOT NULL THEN
+        EXECUTE format(
+            'ALTER TABLE transfer_file DROP CONSTRAINT %I',
+            old_status_constraint
+        );
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'transfer_file'::regclass
+          AND contype = 'c'
+          AND pg_get_constraintdef(oid) LIKE '%SKIPPED%'
+    ) THEN
+        ALTER TABLE transfer_file
+            ADD CONSTRAINT transfer_file_status_check
+            CHECK (status IN (
+                'QUEUED', 'TRANSFERRING', 'COMPLETED', 'SKIPPED', 'FAILED', 'CANCELLED'
+            ));
+    END IF;
+END
+$$;
 
 -- Version 0.2 adds JSON description files. Existing installations execute this
 -- schema on every API start, so update the original 0.1 constraint in place.

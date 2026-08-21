@@ -138,6 +138,139 @@ h2 {
   box-shadow: 0 12px 34px rgba(32, 51, 80, 0.06);
 }
 
+.refresh-time {
+  color: #6b778c;
+  font-size: 13px;
+}
+
+.transfer-jobs,
+.transfer-files {
+  display: grid;
+  gap: 12px;
+}
+
+.transfer-jobs {
+  margin-top: 18px;
+}
+
+.transfer-card {
+  border: 1px solid #dfe6f0;
+  border-radius: 14px;
+  padding: 16px;
+  background: #fbfcfe;
+}
+
+.transfer-card-heading,
+.transfer-progress-summary,
+.transfer-file-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.transfer-card-heading h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.transfer-card-heading p,
+.transfer-counts,
+.transfer-file p {
+  margin: 0;
+  color: #6b778c;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.transfer-state {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #235bbf;
+  background: #eaf1ff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.state-completed {
+  color: #137746;
+  background: #e8f8ef;
+}
+
+.state-failed,
+.state-partial_failed {
+  color: #a83232;
+  background: #fff0f0;
+}
+
+.state-cancelled {
+  color: #6b778c;
+  background: #edf1f6;
+}
+
+.transfer-progress-summary {
+  margin: 15px 0 7px;
+  color: #536176;
+  font-size: 13px;
+}
+
+.progress-track {
+  width: 100%;
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e6ebf2;
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2b70f6, #4b91ff);
+  transition: width 0.3s ease;
+}
+
+.transfer-counts {
+  margin-top: 8px;
+}
+
+.transfer-files {
+  margin-top: 14px;
+}
+
+.transfer-file {
+  border-top: 1px solid #e5eaf2;
+  padding-top: 11px;
+}
+
+.transfer-file-heading {
+  margin-bottom: 6px;
+  color: #455267;
+  font-size: 12px;
+}
+
+.transfer-file-path {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 750;
+}
+
+.transfer-file .progress-track {
+  height: 6px;
+}
+
+.transfer-file > p {
+  margin-top: 5px;
+}
+
+.transfer-file .skip-message {
+  color: #8a6517;
+}
+
+.transfer-file .file-error {
+  color: #a83232;
+}
+
 .summary-card {
   border-radius: 14px;
   padding: 18px 20px;

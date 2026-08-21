@@ -92,6 +92,9 @@ SAR Manager 可以将一个或多个已挂载的局域网 SAR 产品复制（或
 每个产品搬运完成后会立即执行已有的定向入库流程：校验数据源、移动到 `/data/{source}` 并扫描入库；
 系统不会生成缩略图，只会登记产品中已经存在的影像和缩略图文件。
 
+创建任务时系统会先读取远端产品的 XML/JSON 元数据并得到稳定产品编号；如果这些编号已经存在于
+`sar_dataset`，该路径会标记为 `SKIPPED`，不会搬运，也不会在 `MOVE` 模式下删除远端文件。
+
 先将允许访问的局域网共享目录挂载到宿主机，并配置为 API 容器的只读目录。例如：
 
 ```dotenv
@@ -121,10 +124,13 @@ Content-Type: application/json
 例如 `source=LANHE` 默认进入 `/upload/lanhe`。如需按批次分目录，可以显式传入
 `destination_subdirectory`，例如 `2026-08-21`。系统始终把它限制在对应数据源目录内。
 
-返回 `202 Accepted` 和 `job_id`。调用方通过 `GET /api/v1/transfer-jobs/{job_id}` 每 1–2 秒查询总进度和逐文件进度；
+返回 `202 Accepted` 和 `job_id`。调用方通过 `GET /api/v1/transfer-jobs/{job_id}` 每 3 秒查询总进度和逐文件进度；
 `phase=TRANSFERRING` 表示正在搬运，`phase=INGESTING` 表示已搬完并正在入库，`phase=INGESTED` 表示该文件已入库。
 也可使用 `GET /api/v1/transfer-jobs?status=RUNNING` 查看运行中的任务；
 `POST /api/v1/transfer-jobs/{job_id}/cancel` 取消尚未完成的任务。
+
+Web 页面使用 `GET /api/v1/transfer-jobs?limit=500&offset=0` 分页读取全部历史任务，
+每 3 秒刷新一次。任务列表响应中的每个任务均包含 `files`，因此搬运中的字节进度也能直接显示。
 
 状态为 `QUEUED`、`RUNNING`、`COMPLETED`、`PARTIAL_FAILED`、`FAILED` 或 `CANCELLED`。`MOVE` 模式仅在单个文件完整复制到目标目录后才删除源文件，推荐默认使用 `COPY`。
 

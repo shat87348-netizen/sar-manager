@@ -31,6 +31,18 @@
         </article>
       </section>
 
+      <section class="panel transfer-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>搬运与入库进度</h2>
+            <p>每 3 秒自动查询全部搬运任务</p>
+          </div>
+          <span id="transferRefreshTime" class="refresh-time">尚未刷新</span>
+        </div>
+        <p id="transferError" class="error-message" role="alert" hidden></p>
+        <div id="transferJobs" class="transfer-jobs" aria-live="polite"></div>
+      </section>
+
       <section class="panel">
         <div class="panel-heading">
           <div>

@@ -258,11 +258,14 @@ def create_transfer(
 def transfer_jobs(
     status_text: str | None = Query(None, alias="status"),
     limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ) -> dict:
+    jobs = list_transfer_jobs(status_text, limit + 1, offset)
     return {
-        "jobs": [
-            _transfer_job_response(job) for job in list_transfer_jobs(status_text, limit)
-        ]
+        "jobs": [_transfer_job_response(job) for job in jobs[:limit]],
+        "limit": limit,
+        "offset": offset,
+        "has_more": len(jobs) > limit,
     }
 
 
@@ -312,6 +315,7 @@ def _transfer_job_response(job: dict) -> dict:
             "total_files": job["total_files"],
             "completed_files": job["completed_files"],
             "failed_files": job["failed_files"],
+            "skipped_files": job.get("skipped_files", 0),
             "total_bytes": total_bytes,
             "transferred_bytes": transferred_bytes,
             "percent": percent,

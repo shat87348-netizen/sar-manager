@@ -10,13 +10,17 @@ from fastapi import HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from app.adapters import AdapterRegistry
+from app.adapters.base import MetadataError, MetadataIgnored
 from app.config import get_settings
+from app.containers import iter_candidates
+from app.domain import DiscoveryError
 from app.ingest import ingest_upload
 from app.repository import (
     cancel_transfer_file,
     fail_transfer_job,
     finalize_transfer_job,
     finish_transfer_file,
+    get_existing_external_ids,
     get_transfer_job,
     start_transfer_job,
     transfer_job_is_cancelled,
@@ -98,9 +102,37 @@ def _path_size(path: Path) -> int:
     return total
 
 
+def _recognized_external_ids(
+    path: Path,
+    expected_source: str,
+    registry: AdapterRegistry,
+) -> list[str]:
+    external_ids: set[str] = set()
+    for result in iter_candidates(path):
+        if isinstance(result, DiscoveryError):
+            continue
+        try:
+            parsed = registry.parse(result)
+        except (MetadataError, MetadataIgnored):
+            continue
+        if parsed is None:
+            continue
+        if parsed.source != expected_source:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"source path {path.name} is declared as {expected_source}, "
+                    f"but contains {parsed.source} metadata"
+                ),
+            )
+        external_ids.add(parsed.external_id)
+    return sorted(external_ids)
+
+
 def prepare_transfer_files(request: TransferJobRequest) -> list[dict[str, object]]:
     settings = get_settings()
-    supported_sources = AdapterRegistry().source_codes
+    registry = AdapterRegistry()
+    supported_sources = registry.source_codes
     if request.source not in supported_sources:
         raise HTTPException(
             status_code=422,
@@ -138,8 +170,27 @@ def prepare_transfer_files(request: TransferJobRequest) -> list[dict[str, object
                 "source_path": str(_relative_path(source_path, "files")),
                 "destination_path": str(destination_path),
                 "size_bytes": _path_size(source),
+                "external_ids": _recognized_external_ids(
+                    source,
+                    request.source,
+                    registry,
+                ),
             }
         )
+    requested_external_ids = sorted(
+        {
+            external_id
+            for item in prepared
+            for external_id in item["external_ids"]
+        }
+    )
+    existing_external_ids = get_existing_external_ids(requested_external_ids)
+    for item in prepared:
+        item_external_ids = set(item["external_ids"])
+        if item_external_ids and item_external_ids <= existing_external_ids:
+            item["skip_reason"] = "Already ingested: " + ", ".join(
+                sorted(item_external_ids)
+            )
     return prepared
 
 
@@ -203,6 +254,8 @@ def run_transfer_job(job_id: UUID) -> None:
     for file_record in job["files"]:
         if transfer_job_is_cancelled(job_id):
             return
+        if file_record["status"] == "SKIPPED":
+            continue
         file_id = file_record["id"]
         source = _resolve_under_root(source_root, file_record["source_path"], "source_path")
         destination = _resolve_under_root(

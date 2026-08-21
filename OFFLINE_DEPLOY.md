@@ -62,6 +62,8 @@ Docker 会把 `SAR_TRANSFER_SOURCE_DIR` 只读挂载为容器内的 `/transfer-s
 
 然后其他程序可通过 `POST /api/v1/transfer-jobs` 创建搬运任务，Web 端以
 `GET /api/v1/transfer-jobs/{job_id}` 查询搬运与入库阶段及逐文件进度。入库成功后数据位于 `SAR_DATA_DIR/{source}`。
+创建任务时会先按产品编号查询数据库，已有产品标记为 `SKIPPED` 且不搬运；内置 Web 页面每 3 秒查询
+`GET /api/v1/transfer-jobs`，显示全部历史任务及运行中任务的实时进度条。
 
 Compose 挂载会为 `SAR_DATA_DIR` 和 `SAR_UPLOAD_DIR` 使用共享 SELinux 容器标签，
 以支持默认启用 SELinux enforcing 的 CentOS/RHEL 7 本地磁盘目录。API 对数据目录

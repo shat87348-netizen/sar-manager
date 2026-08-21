@@ -384,6 +384,19 @@ def get_existing_metadata_hashes() -> dict[str, str]:
     return {row["external_id"]: row["xml_sha256"] for row in rows}
 
 
+def get_existing_external_ids(external_ids: list[str]) -> set[str]:
+    """Return product identifiers which are already present in the catalogue."""
+
+    if not external_ids:
+        return set()
+    with get_pool().connection() as connection:
+        rows = connection.execute(
+            "SELECT external_id FROM sar_dataset WHERE external_id = ANY(%s::text[])",
+            (external_ids,),
+        ).fetchall()
+    return {row["external_id"] for row in rows}
+
+
 def create_transfer_job(
     source: str,
     server: str,
@@ -392,25 +405,48 @@ def create_transfer_job(
     files: list[dict[str, Any]],
 ) -> dict[str, Any]:
     job_id = uuid4()
-    total_bytes = sum(item["size_bytes"] for item in files)
+    skipped_files = sum(bool(item.get("skip_reason")) for item in files)
+    total_bytes = sum(
+        item["size_bytes"] for item in files if not item.get("skip_reason")
+    )
     with get_pool().connection() as connection, connection.transaction():
         connection.execute(
             """
             INSERT INTO transfer_job (
                 id, source, server, destination_subdirectory, mode, status,
-                total_files, total_bytes
-            ) VALUES (%s, %s, %s, %s, %s, 'QUEUED', %s, %s)
+                total_files, skipped_files, total_bytes
+            ) VALUES (%s, %s, %s, %s, %s, 'QUEUED', %s, %s, %s)
             """,
-            (job_id, source, server, destination_subdirectory, mode, len(files), total_bytes),
+            (
+                job_id,
+                source,
+                server,
+                destination_subdirectory,
+                mode,
+                len(files),
+                skipped_files,
+                total_bytes,
+            ),
         )
         for item in files:
+            skip_reason = item.get("skip_reason")
+            file_status = "SKIPPED" if skip_reason else "QUEUED"
             connection.execute(
                 """
                 INSERT INTO transfer_file (
-                    id, job_id, source_path, destination_path, status, size_bytes
-                ) VALUES (%s, %s, %s, %s, 'QUEUED', %s)
+                    id, job_id, source_path, destination_path, status, size_bytes,
+                    error_message
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
-                (uuid4(), job_id, item["source_path"], item["destination_path"], item["size_bytes"]),
+                (
+                    uuid4(),
+                    job_id,
+                    item["source_path"],
+                    item["destination_path"],
+                    file_status,
+                    item["size_bytes"],
+                    skip_reason,
+                ),
             )
     return get_transfer_job(job_id)  # type: ignore[return-value]
 
@@ -427,19 +463,42 @@ def get_transfer_job(job_id: UUID) -> dict[str, Any] | None:
     return job
 
 
-def list_transfer_jobs(status: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+def list_transfer_jobs(
+    status: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
     params: list[Any] = []
     where = ""
     if status:
         where = "WHERE status = %s"
         params.append(status)
-    params.append(limit)
+    params.extend((limit, offset))
     with get_pool().connection() as connection:
-        return list(
+        jobs = list(
             connection.execute(
-                f"SELECT * FROM transfer_job {where} ORDER BY created_at DESC LIMIT %s", params
+                f"SELECT * FROM transfer_job {where} "
+                "ORDER BY created_at DESC LIMIT %s OFFSET %s",
+                params,
             ).fetchall()
         )
+        if not jobs:
+            return []
+        job_ids = [job["id"] for job in jobs]
+        files = connection.execute(
+            """
+            SELECT * FROM transfer_file
+            WHERE job_id = ANY(%s::uuid[])
+            ORDER BY created_at, id
+            """,
+            (job_ids,),
+        ).fetchall()
+    files_by_job: dict[UUID, list[dict[str, Any]]] = {job_id: [] for job_id in job_ids}
+    for file_record in files:
+        files_by_job[file_record["job_id"]].append(file_record)
+    for job in jobs:
+        job["files"] = files_by_job[job["id"]]
+    return jobs
 
 
 def start_transfer_job(job_id: UUID) -> bool:
@@ -512,14 +571,18 @@ def finish_transfer_file(file_id: UUID, success: bool, error_message: str | None
 def finalize_transfer_job(job_id: UUID, error_message: str | None = None) -> None:
     with get_pool().connection() as connection, connection.transaction():
         job = connection.execute(
-            "SELECT total_files, completed_files, failed_files, status FROM transfer_job WHERE id = %s FOR UPDATE",
+            """
+            SELECT total_files, completed_files, failed_files, skipped_files, status
+            FROM transfer_job WHERE id = %s FOR UPDATE
+            """,
             (job_id,),
         ).fetchone()
         if job is None or job["status"] == "CANCELLED":
             return
+        finished_files = job["completed_files"] + job.get("skipped_files", 0)
         if job["failed_files"] == 0:
             status = "COMPLETED"
-        elif job["completed_files"] == 0:
+        elif finished_files == 0:
             status = "FAILED"
         else:
             status = "PARTIAL_FAILED"

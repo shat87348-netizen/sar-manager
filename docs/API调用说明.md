@@ -414,6 +414,7 @@ CORS_ORIGINS=http://192.168.5.100:8080
 
 SAR Manager 的搬运接口复制或移动 SAR 产品后，会立即执行定向扫描和数据库入库；
 不会生成缩略图，只登记产品中已经存在的缩略图和影像文件。
+创建任务前会解析远端产品编号；数据库中已存在的产品返回 `SKIPPED`，不会产生网络搬运。
 局域网共享必须先由部署人员挂载并配置为受控的 `server` 标识，调用者不能提交任意服务器地址、账号或绝对路径。
 
 ```http
@@ -438,9 +439,13 @@ POST /api/v1/transfer-jobs
 GET /api/v1/transfer-jobs/{job_id}
 ```
 
-响应中的 `progress.transferred_bytes`、`progress.total_bytes` 与 `progress.percent` 表示搬运进度，`files` 数组包含每个文件的状态和已传输字节数。`phase` 用于区分 `TRANSFERRING`、`INGESTING` 和 `INGESTED`。只有入库成功的文件才会变为 `COMPLETED`；入库失败会返回具体错误。建议 Web 每 1–2 秒轮询一次。任务列表和取消接口分别为：
+响应中的 `progress.transferred_bytes`、`progress.total_bytes` 与 `progress.percent` 表示搬运进度，`files` 数组包含每个文件的状态和已传输字节数。`phase` 用于区分 `TRANSFERRING`、`INGESTING` 和 `INGESTED`。只有入库成功的文件才会变为 `COMPLETED`；入库失败会返回具体错误。Web 每 3 秒轮询一次。任务列表和取消接口分别为：
 
 ```http
 GET  /api/v1/transfer-jobs?status=RUNNING
 POST /api/v1/transfer-jobs/{job_id}/cancel
 ```
+
+任务列表支持 `limit`（最大 500）和 `offset` 分页，并返回 `has_more`。每个任务都包含逐文件记录，
+包括 `QUEUED`、`TRANSFERRING`、`INGESTING`、`INGESTED`、`SKIPPED`、`FAILED` 和 `CANCELLED` 阶段。
+内置 Web 页面会自动读取全部分页并每 3 秒刷新进度条。
