@@ -27,13 +27,14 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-sar}:${POSTGRES_PASSWORD:-change-me-offline}@db:5432/${POSTGRES_DB:-sar}
       SCAN_ROOT: /data
+      UPLOAD_ROOT: /upload
       SCAN_WRITE_DELAY_MS: ${SCANNER_WRITE_DELAY_MS:-20}
       TRANSFER_DESTINATION_ROOT: /upload
       TRANSFER_SOURCE_ROOTS: "${TRANSFER_SOURCE_ROOTS:-{}}"
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
     volumes:
-      - ${SAR_DATA_DIR:-./tiff}:/data:ro,z
+      - ${SAR_DATA_DIR:-./tiff}:/data:rw,z
       - ${SAR_UPLOAD_DIR:-./upload}:/upload:rw,z
       # Mount a host directory containing approved LAN shares here. Individual
       # server IDs are mapped by TRANSFER_SOURCE_ROOTS in .env.

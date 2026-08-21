@@ -73,9 +73,8 @@ CREATE TABLE IF NOT EXISTS sar_file (
 
 CREATE INDEX IF NOT EXISTS idx_sar_file_dataset ON sar_file (dataset_id);
 
--- File transfer jobs are intentionally separate from SAR ingestion.  The
--- manager only copies files from approved LAN mounts into a staging area; a
--- downstream process is responsible for metadata parsing and ingestion.
+-- LAN transfer jobs copy products into staging and automatically invoke the
+-- existing targeted ingest flow. A file is completed only after ingest succeeds.
 CREATE TABLE IF NOT EXISTS transfer_job (
     id UUID PRIMARY KEY,
     source TEXT NOT NULL,

@@ -88,8 +88,9 @@ GET /api/v1/sar?startTime=2022-01-01%2000:00:00&endTime=2025-12-31%2023:59:59&bb
 
 ## 局域网文件搬运
 
-SAR Manager 可以将一个或多个已挂载的局域网文件复制（或在确认成功后移动）到临时入库区，
-但**不会**解析元数据、生成缩略图或执行扫描。下游处理系统负责后续处理。
+SAR Manager 可以将一个或多个已挂载的局域网 SAR 产品复制（或在确认成功后移动）到临时入库区。
+每个产品搬运完成后会立即执行已有的定向入库流程：校验数据源、移动到 `/data/{source}` 并扫描入库；
+系统不会生成缩略图，只会登记产品中已经存在的影像和缩略图文件。
 
 先将允许访问的局域网共享目录挂载到宿主机，并配置为 API 容器的只读目录。例如：
 
@@ -118,9 +119,10 @@ Content-Type: application/json
 
 未传 `destination_subdirectory` 时，系统根据 `source` 自动搬到 `/upload/{source}`；
 例如 `source=LANHE` 默认进入 `/upload/lanhe`。如需按批次分目录，可以显式传入
-`destination_subdirectory`，例如 `lanhe/2026-08-21`。
+`destination_subdirectory`，例如 `2026-08-21`。系统始终把它限制在对应数据源目录内。
 
-返回 `202 Accepted` 和 `job_id`。调用方通过 `GET /api/v1/transfer-jobs/{job_id}` 每 1–2 秒查询总进度和逐文件进度，
+返回 `202 Accepted` 和 `job_id`。调用方通过 `GET /api/v1/transfer-jobs/{job_id}` 每 1–2 秒查询总进度和逐文件进度；
+`phase=TRANSFERRING` 表示正在搬运，`phase=INGESTING` 表示已搬完并正在入库，`phase=INGESTED` 表示该文件已入库。
 也可使用 `GET /api/v1/transfer-jobs?status=RUNNING` 查看运行中的任务；
 `POST /api/v1/transfer-jobs/{job_id}/cancel` 取消尚未完成的任务。
 

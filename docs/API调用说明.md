@@ -412,7 +412,8 @@ CORS_ORIGINS=http://192.168.5.100:8080
 
 ## 11. 局域网文件搬运
 
-SAR Manager 的搬运接口只复制或移动文件；不执行 SAR 解析、扫描、缩略图生成或数据库入库。
+SAR Manager 的搬运接口复制或移动 SAR 产品后，会立即执行定向扫描和数据库入库；
+不会生成缩略图，只登记产品中已经存在的缩略图和影像文件。
 局域网共享必须先由部署人员挂载并配置为受控的 `server` 标识，调用者不能提交任意服务器地址、账号或绝对路径。
 
 ```http
@@ -429,7 +430,7 @@ POST /api/v1/transfer-jobs
 ```
 
 `source` 必须是系统已注册的数据源。未传 `destination_subdirectory` 时默认搬到
-`/upload/{source小写}`；例如 `source=LANHE` 会搬到 `/upload/lanhe`。
+`/upload/{source小写}`；例如 `source=LANHE` 会搬到 `/upload/lanhe`。自定义子目录也会被限制在该数据源目录中。
 
 成功时返回 HTTP `202` 与任务编号。使用以下接口查询 Web 所需的进度：
 
@@ -437,7 +438,7 @@ POST /api/v1/transfer-jobs
 GET /api/v1/transfer-jobs/{job_id}
 ```
 
-响应中的 `progress.transferred_bytes`、`progress.total_bytes` 与 `progress.percent` 表示总体进度，`files` 数组包含每个文件的状态和已传输字节数。建议 Web 每 1–2 秒轮询一次。任务列表和取消接口分别为：
+响应中的 `progress.transferred_bytes`、`progress.total_bytes` 与 `progress.percent` 表示搬运进度，`files` 数组包含每个文件的状态和已传输字节数。`phase` 用于区分 `TRANSFERRING`、`INGESTING` 和 `INGESTED`。只有入库成功的文件才会变为 `COMPLETED`；入库失败会返回具体错误。建议 Web 每 1–2 秒轮询一次。任务列表和取消接口分别为：
 
 ```http
 GET  /api/v1/transfer-jobs?status=RUNNING

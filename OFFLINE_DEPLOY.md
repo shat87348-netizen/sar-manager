@@ -43,7 +43,7 @@ SAR_API_PORT=8000
 
 ## 局域网文件搬运
 
-搬运接口从**预先挂载**的局域网目录读取文件，并复制到 `SAR_UPLOAD_DIR`；不会扫描、解析元数据或生成缩略图。
+搬运接口从**预先挂载**的局域网目录读取文件，复制到 `SAR_UPLOAD_DIR` 后立即执行定向入库；不会生成缩略图。
 先在宿主机完成 SMB/NFS 等共享挂载，再在安装目录 `.env` 中配置挂载点与允许调用的服务器标识：
 
 ```dotenv
@@ -61,7 +61,7 @@ Docker 会把 `SAR_TRANSFER_SOURCE_DIR` 只读挂载为容器内的 `/transfer-s
 ```
 
 然后其他程序可通过 `POST /api/v1/transfer-jobs` 创建搬运任务，Web 端以
-`GET /api/v1/transfer-jobs/{job_id}` 查询总进度和逐文件进度。文件落入暂存目录后，由下游系统自行处理。
+`GET /api/v1/transfer-jobs/{job_id}` 查询搬运与入库阶段及逐文件进度。入库成功后数据位于 `SAR_DATA_DIR/{source}`。
 
 Compose 挂载会为 `SAR_DATA_DIR` 和 `SAR_UPLOAD_DIR` 使用共享 SELinux 容器标签，
 以支持默认启用 SELinux enforcing 的 CentOS/RHEL 7 本地磁盘目录。API 对数据目录

@@ -27,7 +27,7 @@ services:
       TRANSFER_DESTINATION_ROOT: /upload
       TRANSFER_SOURCE_ROOTS: "${TRANSFER_SOURCE_ROOTS:-{}}"
     volumes:
-      - ${SAR_DATA_DIR:-./tiff}:/data:ro,z
+      - ${SAR_DATA_DIR:-./tiff}:/data:rw,z
       - ${SAR_UPLOAD_DIR:-./upload}:/upload:rw,z
       # Approved LAN shares are mounted by the deployment operator and exposed
       # as read-only roots selected by TRANSFER_SOURCE_ROOTS.

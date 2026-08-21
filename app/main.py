@@ -29,7 +29,12 @@ from app.repository import (
     query_datasets,
 )
 from app.scanner import scan_storage
-from app.transfer import TransferJobRequest, prepare_transfer_files, run_transfer_job
+from app.transfer import (
+    TransferJobRequest,
+    prepare_transfer_files,
+    run_transfer_job,
+    transfer_destination_subdirectory,
+)
 
 
 @asynccontextmanager
@@ -236,12 +241,12 @@ def list_sources() -> dict:
 def create_transfer(
     payload: TransferJobRequest, background_tasks: BackgroundTasks
 ) -> dict:
-    """Copy or move files from an approved LAN mount into the staging directory."""
+    """Copy or move products from an approved LAN mount, then ingest them."""
     files = prepare_transfer_files(payload)
     job = create_transfer_job(
         source=payload.source.upper(),
         server=payload.server,
-        destination_subdirectory=payload.destination_subdirectory,
+        destination_subdirectory=str(transfer_destination_subdirectory(payload)),
         mode=payload.mode,
         files=files,
     )
@@ -288,6 +293,13 @@ def _transfer_job_response(job: dict) -> dict:
     )
     total_bytes = job["total_bytes"]
     percent = round((transferred_bytes / total_bytes) * 100, 2) if total_bytes else 100.0
+    file_phases = [_transfer_file_phase(item) for item in files]
+    if job["status"] == "RUNNING" and "INGESTING" in file_phases:
+        phase = "INGESTING"
+    elif job["status"] == "RUNNING":
+        phase = "TRANSFERRING"
+    else:
+        phase = job["status"]
     return {
         "job_id": job["id"],
         "source": job["source"],
@@ -295,6 +307,7 @@ def _transfer_job_response(job: dict) -> dict:
         "destination_subdirectory": job["destination_subdirectory"],
         "mode": job["mode"],
         "status": job["status"],
+        "phase": phase,
         "progress": {
             "total_files": job["total_files"],
             "completed_files": job["completed_files"],
@@ -312,6 +325,7 @@ def _transfer_job_response(job: dict) -> dict:
                 "source_path": item["source_path"],
                 "destination_path": item["destination_path"],
                 "status": item["status"],
+                "phase": _transfer_file_phase(item),
                 "size_bytes": item["size_bytes"],
                 "transferred_bytes": item["transferred_bytes"],
                 "error_message": item["error_message"],
@@ -319,6 +333,15 @@ def _transfer_job_response(job: dict) -> dict:
             for item in files
         ],
     }
+
+
+def _transfer_file_phase(item: dict) -> str:
+    status_text = item["status"]
+    if status_text == "COMPLETED":
+        return "INGESTED"
+    if status_text == "TRANSFERRING" and item["transferred_bytes"] >= item["size_bytes"]:
+        return "INGESTING"
+    return status_text
 
 
 @app.post("/api/v1/admin/scan")

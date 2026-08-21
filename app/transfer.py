@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.adapters import AdapterRegistry
 from app.config import get_settings
+from app.ingest import ingest_upload
 from app.repository import (
     cancel_transfer_file,
     fail_transfer_job,
@@ -63,6 +64,19 @@ def _resolve_under_root(root: Path, relative_path: str, field: str) -> Path:
     return candidate
 
 
+def transfer_destination_subdirectory(request: TransferJobRequest) -> Path:
+    """Return an upload subdirectory which is always scoped to the SAR source."""
+
+    source_directory = request.source.lower()
+    requested = request.destination_subdirectory.strip()
+    if not requested:
+        return Path(source_directory)
+    relative = _relative_path(requested, "destination_subdirectory")
+    if relative.parts[0].lower() == source_directory:
+        return relative
+    return Path(source_directory) / relative
+
+
 def _path_size(path: Path) -> int:
     if path.is_symlink():
         raise HTTPException(status_code=422, detail="symbolic links are not supported for transfer")
@@ -104,10 +118,7 @@ def prepare_transfer_files(request: TransferJobRequest) -> list[dict[str, object
         raise HTTPException(
             status_code=503, detail=f"transfer server is not mounted: {request.server}"
         )
-    destination_subdirectory = _relative_path(
-        request.destination_subdirectory.strip() or request.source.lower(),
-        "destination_subdirectory",
-    )
+    destination_subdirectory = transfer_destination_subdirectory(request)
     destination_names: set[str] = set()
     prepared: list[dict[str, object]] = []
     for source_path in request.files:
@@ -170,7 +181,7 @@ def _remove_path(path: Path) -> None:
 
 
 def run_transfer_job(job_id: UUID) -> None:
-    """Run one persisted transfer job. It never invokes SAR parsing or scanning."""
+    """Copy each requested product, then ingest it into the SAR catalogue."""
 
     if not start_transfer_job(job_id):
         return
@@ -198,6 +209,7 @@ def run_transfer_job(job_id: UUID) -> None:
             destination_root, file_record["destination_path"], "destination_path"
         )
         temporary_destination = destination.with_name(f".{destination.name}.transfer-{file_id}")
+        phase = "transfer"
         try:
             if destination.exists():
                 raise RuntimeError("destination already exists")
@@ -218,6 +230,17 @@ def run_transfer_job(job_id: UUID) -> None:
             os.replace(temporary_destination, destination)
             if job["mode"] == "MOVE":
                 _remove_path(source)
+            if transfer_job_is_cancelled(job_id):
+                cancel_transfer_file(file_id)
+                return
+
+            phase = "ingest"
+            ingest_upload(
+                upload_root=destination_root,
+                data_root=settings.scan_root,
+                relative_path=file_record["destination_path"],
+                write_delay_ms=settings.scan_write_delay_ms,
+            )
             finish_transfer_file(file_id, True)
         except TransferCancelled:
             if temporary_destination.exists():
@@ -227,5 +250,5 @@ def run_transfer_job(job_id: UUID) -> None:
         except Exception as exc:  # Keep processing the remaining requested files.
             if temporary_destination.exists():
                 _remove_path(temporary_destination)
-            finish_transfer_file(file_id, False, str(exc))
+            finish_transfer_file(file_id, False, f"{phase} failed: {exc}")
     finalize_transfer_job(job_id)

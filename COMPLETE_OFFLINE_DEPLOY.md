@@ -70,7 +70,7 @@ sudo ./manage.sh ingest gf3/批次目录/产品目录或压缩包
 
 系统会将该产品移动到最终数据目录并只扫描这一项。完整规则见应用目录的 `README.md`。
 
-若需从局域网已挂载共享搬运数据，`SAR_TRANSFER_SOURCE_DIR` 是宿主机的共享挂载点；Docker 会将其只读挂载为 `/transfer-sources`。`TRANSFER_SOURCE_ROOTS` 用 JSON 为可调用的服务器名称映射容器内目录。搬运任务只复制或移动文件到 `SAR_UPLOAD_DIR`，不做扫描、缩略图或元数据处理。修改 `.env` 后执行 `sudo ./manage.sh restart`。
+若需从局域网已挂载共享搬运数据，`SAR_TRANSFER_SOURCE_DIR` 是宿主机的共享挂载点；Docker 会将其只读挂载为 `/transfer-sources`。`TRANSFER_SOURCE_ROOTS` 用 JSON 为可调用的服务器名称映射容器内目录。搬运完成后系统会自动将产品定向入库到 `SAR_DATA_DIR/{source}`，但不生成缩略图。确保 `SAR_DATA_DIR` 对 API 容器可写；修改 `.env` 后执行 `sudo ./manage.sh restart`。
 
 浏览器访问：
 
