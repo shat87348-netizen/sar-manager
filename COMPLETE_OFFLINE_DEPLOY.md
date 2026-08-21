@@ -35,6 +35,9 @@ chmod +x install-all.sh
 sudo ./install-all.sh
 ```
 
+如果 `/opt/sar-manager-offline-0.2.4-centos7-amd64` 已存在，脚本会更新其中的应用包文件并保留原 `.env`，
+因此同版本重新打包后也能正确升级，不会继续使用旧镜像文件。
+
 完成后编辑：
 
 ```bash

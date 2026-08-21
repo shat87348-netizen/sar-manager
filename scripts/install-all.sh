@@ -106,11 +106,13 @@ docker compose version
 
 echo "[6/6] 准备 SAR Manager 应用……"
 mkdir -p "${APP_INSTALL_ROOT}"
-if [[ -e "${APP_DIR}" ]]; then
-  echo "应用目录已经存在，保留：${APP_DIR}"
-else
-  tar -xzf "${APP_ARCHIVE}" -C "${APP_INSTALL_ROOT}"
+if [[ -e "${APP_DIR}" && ! -d "${APP_DIR}" ]]; then
+  die "应用路径已存在但不是目录：${APP_DIR}"
 fi
+if [[ -d "${APP_DIR}" ]]; then
+  echo "应用目录已经存在，更新应用文件并保留 .env：${APP_DIR}"
+fi
+tar -xzf "${APP_ARCHIVE}" -C "${APP_INSTALL_ROOT}"
 
 if [[ ! -f "${APP_DIR}/.env" ]]; then
   cp "${APP_DIR}/.env.example" "${APP_DIR}/.env"
