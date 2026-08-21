@@ -48,6 +48,8 @@ POSTGRES_PASSWORD=请替换为强密码
 SAR_DATA_DIR=/实际的/SAR/数据目录
 SAR_UPLOAD_DIR=/upload
 SAR_API_PORT=8000
+SAR_TRANSFER_SOURCE_DIR=/mnt/sar-shares
+TRANSFER_SOURCE_ROOTS={"sar-storage-01":"/transfer-sources/sar-storage-01"}
 ```
 
 随后启动并扫描：
@@ -67,6 +69,8 @@ sudo ./manage.sh ingest gf3/批次目录/产品目录或压缩包
 ```
 
 系统会将该产品移动到最终数据目录并只扫描这一项。完整规则见应用目录的 `README.md`。
+
+若需从局域网已挂载共享搬运数据，`SAR_TRANSFER_SOURCE_DIR` 是宿主机的共享挂载点；Docker 会将其只读挂载为 `/transfer-sources`。`TRANSFER_SOURCE_ROOTS` 用 JSON 为可调用的服务器名称映射容器内目录。搬运任务只复制或移动文件到 `SAR_UPLOAD_DIR`，不做扫描、缩略图或元数据处理。修改 `.env` 后执行 `sudo ./manage.sh restart`。
 
 浏览器访问：
 

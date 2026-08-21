@@ -77,9 +77,9 @@ chmod +x "${STAGING_BUNDLE}/install.sh" "${STAGING_BUNDLE}/manage.sh" "${STAGING
 (
   cd "${STAGING_BUNDLE}"
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum sar-manager-images.tar.gz compose.yaml install.sh manage.sh configure-data-dir.sh > SHA256SUMS
+    sha256sum sar-manager-images.tar.gz compose.yaml .env.example install.sh manage.sh configure-data-dir.sh > SHA256SUMS
   else
-    shasum -a 256 sar-manager-images.tar.gz compose.yaml install.sh manage.sh configure-data-dir.sh > SHA256SUMS
+    shasum -a 256 sar-manager-images.tar.gz compose.yaml .env.example install.sh manage.sh configure-data-dir.sh > SHA256SUMS
   fi
 )
 

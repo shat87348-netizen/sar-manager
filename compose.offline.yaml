@@ -1,5 +1,3 @@
-version: "2.4"
-
 services:
   db:
     image: ${POSTGIS_IMAGE:-postgis/postgis:16-3.5}
@@ -22,11 +20,18 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-sar}:${POSTGRES_PASSWORD:-change-me-offline}@db:5432/${POSTGRES_DB:-sar}
       SCAN_ROOT: /data
+      UPLOAD_ROOT: /upload
       SCAN_WRITE_DELAY_MS: ${SCANNER_WRITE_DELAY_MS:-20}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      TRANSFER_DESTINATION_ROOT: /upload
+      TRANSFER_SOURCE_ROOTS: "${TRANSFER_SOURCE_ROOTS:-{}}"
     volumes:
       - ${SAR_DATA_DIR:-./tiff}:/data:ro,z
+      - ${SAR_UPLOAD_DIR:-./upload}:/upload:rw,z
+      # Approved LAN shares are mounted by the deployment operator and exposed
+      # as read-only roots selected by TRANSFER_SOURCE_ROOTS.
+      - ${SAR_TRANSFER_SOURCE_DIR:-./transfer-sources}:/transfer-sources:ro,z
     ports:
       - ${SAR_API_PORT:-8000}:8000
     depends_on:

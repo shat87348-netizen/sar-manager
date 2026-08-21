@@ -29,6 +29,7 @@ cd sar-manager-offline-0.2.4-centos7-amd64
 ```dotenv
 POSTGRES_PASSWORD=请替换为强密码
 SAR_DATA_DIR=/实际的/SAR/数据目录
+SAR_UPLOAD_DIR=/实际的/SAR/临时入库目录
 SAR_API_PORT=8000
 ```
 
@@ -39,6 +40,28 @@ SAR_API_PORT=8000
 ./manage.sh health
 ./manage.sh scan
 ```
+
+## 局域网文件搬运
+
+搬运接口从**预先挂载**的局域网目录读取文件，并复制到 `SAR_UPLOAD_DIR`；不会扫描、解析元数据或生成缩略图。
+先在宿主机完成 SMB/NFS 等共享挂载，再在安装目录 `.env` 中配置挂载点与允许调用的服务器标识：
+
+```dotenv
+SAR_TRANSFER_SOURCE_DIR=/mnt/sar-shares
+TRANSFER_SOURCE_ROOTS={"sar-storage-01":"/transfer-sources/sar-storage-01"}
+```
+
+Docker 会把 `SAR_TRANSFER_SOURCE_DIR` 只读挂载为容器内的 `/transfer-sources`。`server` 仅能使用
+`TRANSFER_SOURCE_ROOTS` 中的名称，调用方传入的文件路径必须相对该服务器根目录；不要在 HTTP 请求中传递共享账号、密码或任意网络地址。
+
+修改这些变量后执行：
+
+```bash
+./manage.sh restart
+```
+
+然后其他程序可通过 `POST /api/v1/transfer-jobs` 创建搬运任务，Web 端以
+`GET /api/v1/transfer-jobs/{job_id}` 查询总进度和逐文件进度。文件落入暂存目录后，由下游系统自行处理。
 
 Compose 挂载会为 `SAR_DATA_DIR` 和 `SAR_UPLOAD_DIR` 使用共享 SELinux 容器标签，
 以支持默认启用 SELinux enforcing 的 CentOS/RHEL 7 本地磁盘目录。API 对数据目录
